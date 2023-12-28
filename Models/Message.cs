@@ -13,24 +13,33 @@ namespace LiveChat.API.Models
 
 	public class Message
 	{
-		public int Id { get; set; }	
+
+        public Message()
+        {
+            MessageDate = DateTime.Now;
+        }
+
+        public int Id { get; set; }	
 
 		public string Content { get; set; }=string.Empty;
 
-		public DateTime Sended { get; set; }
+		public DateTime MessageDate { get; set; }
 
 		public bool IsDeleted { get; set; } = false;
 
-		public bool Read { get; set; }=false;
+		public bool IsRead { get; set; }=false;
 
-		public string? AttachmentUrl { get; set; } 
-		public MessageType MessageType { get; set; }
+		public bool IsSent { get; set; } = true;
 
-		public int SenderId { get; set; }
-		public virtual User Sender { get; set; }
+		public string? AttachmentUrl { get; set; }
 
-		public int ReceiverId { get; set; }
-		public virtual User Receiver { get; set; }
+		public MessageType MessageType { get; set; } = MessageType.Text;
+
+		public string SenderId { get; set; }
+		public virtual ApplicationUser Sender { get; set; }
+
+		public string ReceiverId { get; set; }
+		public virtual ApplicationUser Receiver { get; set; }
 
 	}
 }

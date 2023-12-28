@@ -1,8 +1,13 @@
 
 using LiveChat.API.Hubs;
 using LiveChat.API.Models;
+using LiveChat.API.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace LiveChat.API
 {
@@ -13,16 +18,51 @@ namespace LiveChat.API
 			var builder = WebApplication.CreateBuilder(args);
 
 			// Add services to the container.
-
 			builder.Services.AddControllers();
 			// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 			builder.Services.AddEndpointsApiExplorer();
 			builder.Services.AddSwaggerGen();
-			builder.Services.AddSignalR();
 
 			builder.Services.AddDbContext<ChatEntities>(options =>
 			{
 				options.UseSqlServer(builder.Configuration.GetConnectionString("DBConnection"));
+			});
+
+			builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
+				            .AddEntityFrameworkStores<ChatEntities>();
+
+			builder.Services.AddAuthentication(options =>
+			{
+				options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+				options.DefaultChallengeScheme= JwtBearerDefaults.AuthenticationScheme;
+				options.DefaultScheme= JwtBearerDefaults.AuthenticationScheme;
+			}).AddJwtBearer(options =>
+			{
+				options.SaveToken = true;
+				options.RequireHttpsMetadata = false;
+				options.TokenValidationParameters = new TokenValidationParameters()
+				{
+					ValidateIssuer=true,
+					ValidIssuer = builder.Configuration["JWT:IssuerUrl"],
+					ValidateAudience=true,
+					ValidAudience= builder.Configuration["JWT:AudianceUrl"],
+					IssuerSigningKey= new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:SecretKey"]))
+			};
+			});
+
+			//builder.Services.AddScoped<UserService>();
+			builder.Services.AddSignalR();
+
+			builder.Services.AddCors(options =>
+			{
+				options.AddPolicy("AllowSpecificOrigin", builder =>
+				{
+					builder.WithOrigins("http://localhost:4200")
+						   .AllowAnyHeader()
+						   .AllowAnyMethod()
+						   .AllowCredentials();
+				});
+
 			});
 
 			var app = builder.Build();
@@ -31,18 +71,7 @@ namespace LiveChat.API
 			{
 				var serviceProvider = scope.ServiceProvider;
 				var dbContext = serviceProvider.GetRequiredService<ChatEntities>();
-
-				var fakeUsers = TestDataGenerator.GenerateFakeUsers(10);
-				dbContext.Users.AddRange(fakeUsers);
-				dbContext.SaveChanges();
-
-				var fakeMessages = TestDataGenerator.GenerateFakeMessages(20, fakeUsers);
-				var fakeUserConnections = TestDataGenerator.GenerateFakeUserConnections(5, fakeUsers);
-
-				dbContext.Messages.AddRange(fakeMessages);
-				dbContext.UserConnections.AddRange(fakeUserConnections);
-
-				dbContext.SaveChanges();
+				dbContext.Database.EnsureCreated();
 			}
 
 			// Configure the HTTP request pipeline.
@@ -54,10 +83,14 @@ namespace LiveChat.API
 
 			app.UseHttpsRedirection();
 
+			app.UseCors("AllowSpecificOrigin");
+
+			app.UseAuthentication();
+
 			app.UseAuthorization();
 
-			app.MapHub<ChatHub>("/chat");
 			app.MapControllers();
+			app.MapHub<ChatHub>("/chat");
 
 			app.Run();
 		}
