@@ -4,7 +4,7 @@ namespace LiveChat.API.Hubs
 {
 	public interface IChatHub
 	{
-		Task ReceiveMessage(string senderId, string message);
+		Task ReceiveMessage(string senderName, string message,DateTime  messgaeDate);
 		Task OnlineUsers(List<User>onlineUsers);
 
 	}

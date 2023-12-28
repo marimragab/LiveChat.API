@@ -1,7 +1,10 @@
-﻿using LiveChat.API.Models;
+﻿using LiveChat.API.Migrations;
+using LiveChat.API.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
 namespace LiveChat.API.Hubs
 {
@@ -10,95 +13,95 @@ namespace LiveChat.API.Hubs
 		private readonly ChatEntities _dbContext;
 		private readonly UserManager<ApplicationUser> _userManager;
 
-		public ChatHub(ChatEntities dbContext,UserManager<ApplicationUser> userManager)
-        {
+		public ChatHub(ChatEntities dbContext, UserManager<ApplicationUser> userManager)
+		{
 			_dbContext = dbContext;
 			_userManager = userManager;
-        }
+		}
+
+	
+		//public async Task SendMessage(string receiverId, string message)
+		//{
+		//	var senderId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+		//	if (!string.IsNullOrEmpty(senderId))
+		//	{
+		//		await Clients.User(receiverId).ReceiveMessage(senderId, message);
+
+		//		var chatMessage = new Message
+		//		{
+		//			SenderId = senderId,
+		//			ReceiverId = receiverId,
+		//			Content = message,
+		//			IsSent = true,
+		//		};
+
+		//		await _dbContext.Messages.AddAsync(chatMessage);
+		//		await _dbContext.SaveChangesAsync();
+		//	}
+		//}
+
+		public async Task SendMessage(string content, string senderId, string receiverId)
+		{
+			var sender = await _userManager.FindByIdAsync(senderId);
+			if (receiverId != null)
+			{
+				await Clients.User(receiverId).ReceiveMessage(sender.UserName, content,DateTime.Now);
+			}
+
+			var message = new Message
+			{
+				Content = content,
+				MessageDate = DateTime.Now,
+				SenderId = senderId,
+				ReceiverId = receiverId
+			};
+
+			await _dbContext.Messages.AddAsync(message);
+			await _dbContext.SaveChangesAsync();
+
+			var userConnection = new UserConnection { UserId = senderId, ConnectionId = Context.ConnectionId };
+			await _dbContext.UserConnections.AddAsync(userConnection);
+			await _dbContext.SaveChangesAsync();
+		}
 
 		public async Task JoinChat(string userId)
 		{
 			await Groups.AddToGroupAsync(Context.ConnectionId, userId);
 		}
 
-		public async Task SendMessage(string receiverId,string message)
+		public override async Task OnConnectedAsync()
 		{
-			var senderId = Context.UserIdentifier;
+			var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-			var chatMessage = new Message
+			if (!string.IsNullOrEmpty(userId))
 			{
-				SenderId = senderId,
-				ReceiverId = receiverId,
-				Content = message,
-			};
+				var connection = new UserConnection
+				{
+					ConnectionId = Context.ConnectionId,
+					UserId = userId
+				};
 
-			_dbContext.Messages.Add(chatMessage);
-			await _dbContext.SaveChangesAsync();
+				_dbContext.UserConnections.Add(connection);
+				await _dbContext.SaveChangesAsync();
+			}
 
-			await Clients.User(receiverId).ReceiveMessage(senderId, message);
+			await base.OnConnectedAsync();
 		}
 
-		//public override async Task OnConnectedAsync()
-		//{
-		//	var userId = GetUserIdFromContext();
-		//	var connectionId = Context.ConnectionId;
+		public override async Task OnDisconnectedAsync(Exception exception)
+		{
+			var connection = await _dbContext.UserConnections
+				.SingleOrDefaultAsync(c => c.ConnectionId == Context.ConnectionId);
 
-		//	// Save the user's connection to the database
-		//	var userConnection = new UserConnection { UserId = userId, ConnectionId = connectionId };
-		//	_dbEntities.UserConnections.Add(userConnection);
-		//	await _dbEntities.SaveChangesAsync();
+			if (connection != null)
+			{
+				_dbContext.UserConnections.Remove(connection);
+				await _dbContext.SaveChangesAsync();
+			}
 
-		//	// Broadcast the updated list of online users
-		//	var onlineUsers = GetOnlineUsers();
-		//	await Clients.All.OnlineUsers(onlineUsers);
+			await base.OnDisconnectedAsync(exception);
+		}
 
-		//	await base.OnConnectedAsync();
-		//}
-
-		//public override async Task OnDisconnectedAsync(Exception exception)
-		//{
-		//	//var connectionId = Context.ConnectionId;
-
-		//	//// Remove the user's connection from the database
-		//	//var userConnection = _dbEntities.UserConnections
-		//	//	                                        .FirstOrDefault(uc => uc.ConnectionId == connectionId);
-		//	//if (userConnection != null)
-		//	//{
-		//	//	_dbEntities.UserConnections.Remove(userConnection);
-		//	//	await _dbEntities.SaveChangesAsync();
-		//	//}
-
-		//	//// Broadcast the updated list of online users
-		//	//var onlineUsers = GetOnlineUsers();
-		//	//await Clients.All.OnlineUsers(onlineUsers);
-
-		//	await base.OnDisconnectedAsync(exception);
-		//}
-
-		//private int GetUserIdFromContext()
-		//{
-		//	var userIdClaim = Context.User?.FindFirst("UserId");
-		//	return userIdClaim != null ? int.Parse(userIdClaim.Value) : 0;
-		//}
-
-		//private string GetConnectionIdFromUserId(string userId)
-		//{
-		//	var userConnection = _dbEntities.UserConnections.FirstOrDefault(uc => uc.UserId == userId);
-		//	return userConnection?.ConnectionId;
-		//}
-
-		//private string GetUserIdFromConnectionId(string connectionId)
-		//{
-		//	var userConnection = _dbEntities.UserConnections.FirstOrDefault(uc => uc.ConnectionId == connectionId);
-		//	return userConnection?.UserId ?? "";
-		//}
-
-		//private List<User> GetOnlineUsers()
-		//{
-		//	var onlineUserIds = _dbEntities.UserConnections
-		//											.Select(uc => uc.UserId).ToList();
-			
-		//	return _dbEntities.ApplicationUser.Where(u => onlineUserIds.Contains(u.Id)).ToList();
-		//}
 	}
 }

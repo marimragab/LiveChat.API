@@ -25,11 +25,13 @@ namespace LiveChat.API.Models
 
 		public DateTime MessageDate { get; set; }
 
-		public bool IsDeleted { get; set; } = false;
-
 		public bool IsRead { get; set; }=false;
 
+		public bool IsSeen { get; set; } = false;
+
 		public bool IsSent { get; set; } = true;
+
+		public bool IsDeleted { get; set; } = false;
 
 		public string? AttachmentUrl { get; set; }
 
